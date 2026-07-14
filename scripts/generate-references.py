@@ -58,6 +58,7 @@ TOC_PLACEHOLDER = "@@TOC@@"
 
 MARKER_RE = re.compile(r"^\{:\s*\.?([\w-]*)[^}]*\}\s*$")
 IMAGE_RE = re.compile(r"^!\[[^\]]*\]\(/assets/[^)]*\)\s*$")
+BUTTON_RE = re.compile(r"^\[[^\]]+\]\([^)]+\)\{:\s*\.btn[^}]*\}\s*$")
 HEADING_RE = re.compile(r"^(#{2,3}) (.+?)\s*$")
 
 
@@ -141,6 +142,11 @@ def transform(lines):
 
         # site-relative images cannot ship with the skill
         if IMAGE_RE.match(stripped):
+            i += 1
+            continue
+
+        # navigation button rows are site chrome, not reference content
+        if BUTTON_RE.match(stripped):
             i += 1
             continue
 

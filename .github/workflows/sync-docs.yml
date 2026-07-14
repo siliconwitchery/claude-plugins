@@ -1,0 +1,53 @@
+name: Sync docs references
+
+# Regenerates the skill reference files from the siliconwitchery/docs repo and
+# opens a PR if anything changed. Changes are never auto-merged: a human
+# reviews and merges the PR.
+
+on:
+  repository_dispatch:
+    types: [docs-updated]
+  schedule:
+    # Weekly safety net in case a repository_dispatch is missed
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v4
+        with:
+          path: claude-plugins
+
+      - name: Checkout the docs repo
+        uses: actions/checkout@v4
+        with:
+          repository: siliconwitchery/docs
+          path: docs
+
+      - name: Regenerate reference files
+        working-directory: claude-plugins
+        run: python3 scripts/generate-references.py --docs ../docs --write
+
+      - name: Open pull request if references changed
+        uses: peter-evans/create-pull-request@v6
+        with:
+          # PAT or GitHub App token — PRs opened with the default GITHUB_TOKEN never trigger validate.yml
+          token: ${{ secrets.SYNC_PR_TOKEN }}
+          path: claude-plugins
+          branch: sync-docs-references
+          title: "Sync skill references with docs"
+          commit-message: "Regenerate skill references from docs"
+          body: |
+            Automated regeneration of the skill reference files from the
+            latest siliconwitchery/docs content via
+            `scripts/generate-references.py --write`.
+
+            Review the diff before merging — do not auto-merge.
+          delete-branch: true

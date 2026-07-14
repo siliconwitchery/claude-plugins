@@ -1,0 +1,75 @@
+name: Validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate plugin JSON manifests
+        run: |
+          python3 -c "import json; json.load(open('.claude-plugin/marketplace.json'))"
+          python3 -c "import json; json.load(open('plugins/superstack/.claude-plugin/plugin.json'))"
+
+      - name: Install PyYAML
+        run: python3 -m pip install --quiet pyyaml
+
+      - name: Validate SKILL.md frontmatter
+        run: |
+          python3 - <<'EOF'
+          import sys
+          from pathlib import Path
+          import yaml
+
+          failed = False
+          skills = sorted(Path("plugins").glob("*/skills/*/SKILL.md"))
+          if not skills:
+              sys.exit("no SKILL.md files found")
+
+          for skill in skills:
+              errors = []
+              def fail(msg):
+                  global failed
+                  failed = True
+                  errors.append(msg)
+                  print(f"FAIL {skill}: {msg}")
+
+              lines = skill.read_text(encoding="utf-8").splitlines()
+              if not lines or lines[0].strip() != "---":
+                  fail("missing YAML frontmatter")
+                  continue
+              try:
+                  end = next(i for i in range(1, len(lines)) if lines[i].strip() == "---")
+              except StopIteration:
+                  fail("unterminated YAML frontmatter")
+                  continue
+              try:
+                  meta = yaml.safe_load("\n".join(lines[1:end]))
+              except yaml.YAMLError as e:
+                  fail(f"invalid YAML frontmatter: {e}")
+                  continue
+              if not isinstance(meta, dict):
+                  fail("frontmatter is not a YAML mapping")
+                  continue
+              if meta.get("name") != skill.parent.name:
+                  fail(f"name {meta.get('name')!r} does not match directory {skill.parent.name!r}")
+              desc = meta.get("description")
+              if not isinstance(desc, str) or not desc.strip():
+                  fail("description is missing or empty")
+              elif len(desc) > 1024:
+                  fail(f"description is {len(desc)} chars (max 1024)")
+              if not errors:
+                  print(f"ok   {skill}")
+
+          sys.exit(1 if failed else 0)
+          EOF
+
+      - name: Compile Python sources
+        run: |
+          find . -name '*.py' -not -path './.git/*' -print0 \
+            | xargs -0 --no-run-if-empty python3 -m py_compile
